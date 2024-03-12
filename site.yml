@@ -4,13 +4,20 @@
    become: true
    pre_tasks:
  
+   - name: install updates (CentOS)
+     tags: always
+     dnf:
+       update_cache: yes
+     changed_when: false
+     when: ansible_distribution == "CentOS"
+ 
    - name: install updates (Ubuntu)
      tags: always
      apt:
-       upgrade: dist
        update_cache: yes
+     changed_when: false
      when: ansible_distribution == "Ubuntu"
-
+ 
  - hosts: all
    become: true
    tasks:
@@ -25,7 +32,7 @@
      tags: always
      authorized_key:
        user: simone
-       key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAe7/ofWLNBq3+fRn3UmgAizdicLs9vcS4Oj8VSOD1S/ ansible"
+       key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAh3vvBGIA81lSh7er7HJnaAMGZDJBxqMyeHvcDVqS3H ansible"
          
    - name: add sudoers file for simone
      tags: always
@@ -39,7 +46,7 @@
  - hosts: workstations
    become: true
    tasks:
-
+ 
    - name: install unzip
      package:
        name: unzip
@@ -56,14 +63,23 @@
  - hosts: web_servers
    become: true
    tasks:
-
-   - name: start and enable apache2 (Ubuntu)
-     tags: apache,centos,apache2
+ 
+   - name: install httpd package (CentOS)
+     tags: apache,centos,httpd
+     dnf:
+       name:
+         - httpd
+         - php
+       state: latest
+     when: ansible_distribution == "CentOS"
+ 
+   - name: start and enable httpd (CentOS)
+     tags: apache,centos,httpd
      service:
-       name: apache2
+       name: httpd
        state: started
        enabled: yes
-     when: ansible_distribution == "Ubuntu"
+     when: ansible_distribution == "CentOS"
  
    - name: install apache2 package (Ubuntu)
      tags: apache,apache2,ubuntu
@@ -73,6 +89,22 @@
          - libapache2-mod-php
        state: latest
      when: ansible_distribution == "Ubuntu"
+ 
+   - name: change e-mail address for admin
+     tags: apache,centos,httpd
+     lineinfile:
+       path: /etc/httpd/conf/httpd.conf
+       regexp: '^ServerAdmin'
+       line: ServerAdmin somebody@somewhere.net
+     when: ansible_distribution == "CentOS"
+     register: httpd
+ 
+   - name: restart httpd (CentOS)
+     tags: apache,centos,httpd
+     service:
+       name: httpd
+       state: restarted
+     when: httpd.changed    
  
    - name: copy html file for site
      tags: apache,apache,apache2,httpd
@@ -86,6 +118,13 @@
  - hosts: db_servers
    become: true
    tasks:
+ 
+   - name: install mariadb server package (CentOS)
+     tags: centos,db,mariadb
+     dnf:
+       name: mariadb
+       state: latest
+     when: ansible_distribution == "CentOS"
  
    - name: install mariadb server
      tags: db,mariadb,ubuntu
